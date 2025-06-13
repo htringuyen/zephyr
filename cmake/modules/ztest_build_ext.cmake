@@ -4,7 +4,7 @@ if (${BOARD} STREQUAL "unit_testing_ext/unit_testing")
 
     #set(EXTRA_ZEPHYR_MODULES /home/htring/embc/ztest-build-ext)
 
-    list(APPEND EXTRA_ZEPHYR_MODULES /home/htring/embc/ztest-build-ext)
+    list(APPEND EXTRA_ZEPHYR_MODULES ${UT_MODULE_DIR})
 
     message(STATUS "Loading ztest-build-ext")
     include(extensions)
