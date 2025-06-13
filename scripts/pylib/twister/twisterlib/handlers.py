@@ -283,6 +283,9 @@ class BinaryHandler(Handler):
         elif self.instance.testsuite.type == "unit":
             assert self.binary, "Missing binary in unit testsuite."
             command = [self.binary]
+        elif self.instance.platform.name == "unit_testing_ext/unit_testing":
+            binary = os.path.join(self.get_default_domain_build_dir(), "app")
+            command = [binary]
         else:
             binary = os.path.join(self.get_default_domain_build_dir(), "zephyr", "zephyr.exe")
             command = [binary]

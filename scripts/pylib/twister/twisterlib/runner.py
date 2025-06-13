@@ -984,6 +984,7 @@ class ProjectBuilder(FilterBuilder):
         self.instance.setup_handler(self.env)
 
         if op == "filter":
+            status_before = self.instance.status
             try:
                 ret = self.cmake(filter_stages=self.instance.filter_stages)
                 if self.instance.status in [TwisterStatus.FAIL, TwisterStatus.ERROR]:
@@ -1007,10 +1008,13 @@ class ProjectBuilder(FilterBuilder):
                 self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
                 next_op = 'report'
             finally:
+                logger.debug(f"status_before={status_before}, status_after={self.instance.status}")
+                logger.debug(f"current_op={op}, next_op={next_op}")
                 self._add_to_pipeline(pipeline, next_op)
 
         # The build process, call cmake and build with configured generator
         elif op == "cmake":
+            status_before = self.instance.status
             try:
                 ret = self.cmake()
                 if self.instance.status in [TwisterStatus.FAIL, TwisterStatus.ERROR]:
@@ -1040,13 +1044,18 @@ class ProjectBuilder(FilterBuilder):
                 self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
                 next_op = 'report'
             finally:
+                logger.debug(f"status_before={status_before}, status_after={self.instance.status}")
+                logger.debug(f"current_op={op}, next_op={next_op}")
                 self._add_to_pipeline(pipeline, next_op)
 
         elif op == "build":
+            status_before = self.instance.status
             try:
                 logger.debug(f"build test: {self.instance.name}")
                 ret = self.build()
+                logger.debug(f"test built: ret={ret}")
                 if not ret:
+                    logger.debug("built test: failed")
                     self.instance.status = TwisterStatus.ERROR
                     self.instance.reason = "Build Failure"
                     next_op = 'report'
@@ -1054,6 +1063,7 @@ class ProjectBuilder(FilterBuilder):
                     # Count skipped cases during build, for example
                     # due to ram/rom overflow.
                     if  self.instance.status == TwisterStatus.SKIP:
+                        logger.debug(f"test built: process {TwisterStatus.SKIP}")
                         results.skipped_increment()
                         self.instance.add_missing_case_status(
                             TwisterStatus.SKIP,
@@ -1061,12 +1071,14 @@ class ProjectBuilder(FilterBuilder):
                         )
 
                     if ret.get('returncode', 1) > 0:
+                        logger.debug(f"test built: process in case return code not found")
                         self.instance.add_missing_case_status(
                             TwisterStatus.BLOCK,
                             self.instance.reason
                         )
                         next_op = 'report'
                     else:
+                        logger.debug("test built: ok, processing next")
                         if self.instance.testsuite.harness in ['ztest', 'test']:
                             logger.debug(
                                 f"Determine test cases for test instance: {self.instance.name}"
@@ -1089,18 +1101,31 @@ class ProjectBuilder(FilterBuilder):
                 self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
                 next_op = 'report'
             finally:
+                logger.debug(f"status_before={status_before}, status_after={self.instance.status}")
+                logger.debug(f"current_op={op}, next_op={next_op}")
                 self._add_to_pipeline(pipeline, next_op)
 
         elif op == "gather_metrics":
+            status_before = self.instance.status
             try:
+                logger.debug(f"gather metrics: {self.instance.name}")
                 ret = self.gather_metrics(self.instance)
+                logger.debug(f"metrics gathered: ret={ret}")
+                logger.debug(
+                    f"Run condition: instance.run={self.instance.run}, "
+                    f"instance.handler.ready={self.instance.handler.ready}, "
+                    f"instance.handler.type={type(self.instance.handler)}"
+                )
                 if not ret or ret.get('returncode', 1) > 0:
+                    logger.debug(f"metrics gathered: failed")
                     self.instance.status = TwisterStatus.ERROR
                     self.instance.reason = "Build Failure at gather_metrics."
                     next_op = 'report'
                 elif self.instance.run and self.instance.handler.ready:
+                    logger.debug(f"metrics gathered: ok, prepare running")
                     next_op = 'run'
                 else:
+                    logger.debug(f"metrics gathered: edge case. current status = {self.instance.status}")
                     if self.instance.status == TwisterStatus.NOTRUN:
                         run_conditions =  (
                             f"(run:{self.instance.run},"
@@ -1111,6 +1136,7 @@ class ProjectBuilder(FilterBuilder):
                             TwisterStatus.NOTRUN,
                             "Nowhere to run"
                         )
+                    logger.debug(f"metrics gathered: skip run, go to report")
                     next_op = 'report'
             except StatusAttributeError as sae:
                 logger.error(str(sae))
@@ -1120,10 +1146,13 @@ class ProjectBuilder(FilterBuilder):
                 self.instance.add_missing_case_status(TwisterStatus.BLOCK, reason)
                 next_op = 'report'
             finally:
+                logger.debug(f"status_before={status_before}, status_after={self.instance.status}")
+                logger.debug(f"current_op={op}, next_op={next_op}")
                 self._add_to_pipeline(pipeline, next_op)
 
         # Run the generated binary using one of the supported handlers
         elif op == "run":
+            status_before = self.instance.status
             try:
                 logger.debug(f"run test: {self.instance.name}")
                 self.run()
@@ -1147,10 +1176,13 @@ class ProjectBuilder(FilterBuilder):
                 next_op = 'report'
                 additionals = {}
             finally:
+                logger.debug(f"status_before={status_before}, status_after={self.instance.status}")
+                logger.debug(f"current_op={op}, next_op={next_op}")
                 self._add_to_pipeline(pipeline, next_op, additionals)
 
         # Run per-instance code coverage
         elif op == "coverage":
+            status_before = self.instance.status
             try:
                 logger.debug(f"Run coverage for '{self.instance.name}'")
                 self.instance.coverage_status, self.instance.coverage = \
@@ -1169,13 +1201,18 @@ class ProjectBuilder(FilterBuilder):
                 next_op = 'report'
                 additionals = {}
             finally:
+                logger.debug(f"status_before={status_before}, status_after={self.instance.status}")
+                logger.debug(f"current_op={op}, next_op={next_op}")
                 self._add_to_pipeline(pipeline, next_op, additionals)
 
         # Report results and output progress to screen
         elif op == "report":
+            status_before = self.instance.status
+            logger.debug("reporting: preparing")
             try:
                 with lock:
                     done.put(self.instance)
+                    logger.debug("reporting: writing output")
                     self.report_out(results)
 
                 if not self.options.coverage:
@@ -1198,6 +1235,8 @@ class ProjectBuilder(FilterBuilder):
                 next_op = None
                 additionals = {}
             finally:
+                logger.debug(f"status_before={status_before}, status_after={self.instance.status}")
+                logger.debug(f"current_op={op}, next_op={next_op}")
                 self._add_to_pipeline(pipeline, next_op, additionals)
 
         elif op == "cleanup":

@@ -248,6 +248,7 @@ class TestInstance:
         options = env.options
         common_args = (options, env.generator_cmd, not options.disable_suite_name_check)
         simulator = self.platform.simulator_by_name(options.sim_name)
+        logger.debug(f"handler:setup: platform = {self.platform.name}")
         if options.device_testing:
             handler = DeviceHandler(self, "device", *common_args)
             handler.call_make_run = False
@@ -263,8 +264,7 @@ class TestInstance:
             else:
                 handler = SimulationHandler(self, simulator.name, *common_args)
                 handler.ready = simulator.is_runnable()
-
-        elif self.testsuite.type == "unit":
+        elif self.testsuite.type == "unit" or self.platform.name == "unit_testing_ext/unit_testing":
             handler = BinaryHandler(self, "unit", *common_args)
             handler.binary = os.path.join(self.build_dir, "testbinary")
             if options.enable_coverage:
