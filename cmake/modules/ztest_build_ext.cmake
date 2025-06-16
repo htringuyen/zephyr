@@ -1,5 +1,22 @@
 include_guard(GLOBAL)
 
+# Save original include command
+macro(_original_include)
+    _include(${ARGN})
+endmacro()
+
+# Override include with timing
+macro(include)
+    string(TIMESTAMP _start "%s%f" UTC)
+    _include(${ARGN})
+    string(TIMESTAMP _end "%s%f" UTC)
+    math(EXPR _elapsed "${_end} - ${_start}")
+    math(EXPR _ms_whole "${_elapsed} / 1000")
+    math(EXPR _ms_frac "${_elapsed} % 1000")
+    message(STATUS "include(${ARGV0}) took ${_ms_whole}.${_ms_frac} milliseconds")
+endmacro()
+
+
 if (${BOARD} STREQUAL "unit_testing_ext/unit_testing")
 
     if (NOT DEFINED UT_MODULE_DIR)
